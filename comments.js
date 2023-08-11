@@ -1,74 +1,43 @@
 // create web server
-// 1. load modules
-const express = require("express");
-const bodyParser = require("body-parser");
-const cors = require("cors");
-const mongoose = require("mongoose");
-const Comment = require("./models/Comment");
-const app = express();
-const router = express.Router();
-const port = process.env.PORT || 5000;
-// 2. define middleware
-app.use(bodyParser.json());
-app.use(cors());
-app.use("/api", router);
-// 3. connect to mongodb
-mongoose.connect("mongodb://localhost:27017/comments");
-const connection = mongoose.connection;
-connection.once("open", () => {
-  console.log("MongoDB database connection established successfully!");
+var express = require('express');
+var app = express();
+// create server
+var server = require('http').createServer(app);
+// create socket.io instance
+var io = require('socket.io')(server);
+// create redis client
+var redis = require('redis');
+var client = redis.createClient();
+// redis database number
+var db = 0;
+// set redis database
+client.select(db);
+// port
+var port = 8081;
+// set directory for static files
+app.use(express.static(__dirname + '/public'));
+// start server
+server.listen(port, function() {
+  console.log('Server listening on port %d', port);
 });
-// 4. define routes
-// get all comments
-router.route("/comments").get((req, res) => {
-  Comment.find((err, comments) => {
-    if (err) console.log(err);
-    else res.json(comments);
-  });
-});
-// get one comment
-router.route("/comments/:id").get((req, res) => {
-  Comment.findById(req.params.id, (err, comment) => {
-    if (err) console.log(err);
-    else res.json(comment);
-  });
-});
-// add new comment
-router.route("/comments/add").post((req, res) => {
-  let comment = new Comment(req.body);
-  comment
-    .save()
-    .then(comment => {
-      res.status(200).json({ comment: "comment added successfully" });
-    })
-    .catch(err => {
-      res.status(400).send("adding new comment failed");
+// socket.io events
+io.on('connection', function(socket){
+  // new comment event
+  socket.on('new comment', function(data){
+    // add comment to redis list
+    client.lpush('comments', JSON.stringify(data), function(err, reply) {
+      // emit comment to all clients
+      io.emit('new comment', data);
     });
-});
-// update comment
-router.route("/comments/update/:id").post((req, res) => {
-  Comment.findById(req.params.id, (err, comment) => {
-    if (!comment) return next(new Error("Could not load document"));
-    else {
-      comment.comment_author = req.body.comment_author;
-      comment.comment_body = req.body.comment_body;
-      comment.comment_email = req.body.comment_email;
-      comment
-        .save()
-        .then(comment => {
-          res.json("Update done");
-        })
-        .catch(err => {
-          res.status(400).send("Update failed");
-        });
-    }
+  });
+  // get comments event
+  socket.on('get comments', function(data){
+    // get all comments from redis list
+    client.lrange('comments', 0, -1, function(err, reply) {
+      // emit comments to all clients
+      reply.forEach(function(comment) {
+        io.emit('new comment', JSON.parse(comment));
+      });
+    });
   });
 });
-// delete comment
-router.route("/comments/delete/:id").get((req, res) => {
-  Comment.findByIdAndRemove({ _id: req.params.id }, (err, comment) => {
-    if (err) res.json(err);
-    else res.json("Removed successfully
-
-
- 
